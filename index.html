@@ -726,7 +726,7 @@ body {
 
 </style>
 </head>
-<body>
+<body data-theme="dark">
 
 <!-- ══════════════════════════════════════
      ONBOARDING OVERLAY
@@ -1344,12 +1344,16 @@ const S = {
 };
 
 // ── THEME ────────────────────────────────────────────────
+// Global theme state (default: dark)
+let isDark = true;
+
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
+  document.body.setAttribute('data-theme', next);
   localStorage.setItem('theme', next);
-  const isDark = next === 'dark';
+  isDark = next === 'dark';
   document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
   document.getElementById('theme-label').textContent = isDark ? 'Dark' : 'Light';
 }
@@ -1357,9 +1361,10 @@ function toggleTheme() {
 // Initialize theme on load (default: dark)
 (function initTheme() {
   const stored = localStorage.getItem('theme');
-  const theme = stored || 'dark';
+  const theme = (stored === 'dark' || stored === 'light') ? stored : 'dark';
   document.documentElement.setAttribute('data-theme', theme);
-  const isDark = theme === 'dark';
+  document.body.setAttribute('data-theme', theme);
+  isDark = theme === 'dark';
   document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
   document.getElementById('theme-label').textContent = isDark ? 'Dark' : 'Light';
 })();
