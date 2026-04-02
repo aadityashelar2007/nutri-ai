@@ -855,7 +855,7 @@ body {
           <div class="act-icon">🚶</div><div class="act-name">Light</div><div class="act-desc">1–3 workouts/week</div>
         </button>
         <button class="act-btn" data-act="1.55" onclick="selectAct(this)">
-          <div class="act-icon">🏃</div><div class="act-name">Moderate</div><div class="act-desc">3–5 workouts/week</div>
+          <div class="act-icon">🏃</div><div class="act-name">rate</div><div class="act-desc">3–5 workouts/week</div>
         </button>
         <button class="act-btn" data-act="1.725" onclick="selectAct(this)">
           <div class="act-icon">🏋️</div><div class="act-name">Very Active</div><div class="act-desc">Hard training daily</div>
@@ -930,6 +930,7 @@ body {
         <h1 id="topbar-title">Dashboard</h1>
         <p id="topbar-sub">Track your nutrition today</p>
       </div>
+      
       <div class="topbar-right">
         <span class="refeed-chip" id="refeed-chip">🔄 Refeed Mode Active</span>
         <button class="theme-toggle" onclick="toggleTheme()">
@@ -1101,6 +1102,7 @@ body {
         <div>
           <div class="result-box" id="ai-result">
             <div class="rb-tag">✨ AI Detected</div>
+            <div id="ai-result-text"></div>
             <div class="rb-name" id="result-food-name">Pizza</div>
             <div class="rb-portion" id="result-portion">1 slice (estimated)</div>
             <div>
@@ -1291,7 +1293,8 @@ body {
 const BACKEND = 'http://localhost:5000';
 
 function requireGeminiKey() {
-  return true; // Key is handled securely in the backend
+  // Mock implementation - no key required for demo
+  return true;
 }
 
 function getGeminiError(data) {
@@ -1821,90 +1824,94 @@ function handleImageUpload(e) {
 }
 
 async function analyzeImage() {
-  if (!currentImageBase64) { showToast('⚠️ Please upload an image first'); return; }
-  if (!requireGeminiKey()) return;
-  if (window.location.protocol === 'file:') {
-    showToast('Open the app from a local server (e.g. run "npx serve" in the folder) so Snap can work.');
-    document.getElementById('snap-hint').textContent = 'Run from a server: open terminal in the app folder and run: npx serve';
-    return;
-  }
+  const fileInput = document.getElementById('fileInput');
+  const file = fileInput.files[0];
+  if (!file) { showToast('⚠️ Please select an image first'); return; }
+
   const btn = document.getElementById('analyzeBtn');
-  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>&nbsp; Analyzing...';
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div>&nbsp; Analyzing...';
   document.getElementById('ai-result').classList.remove('show');
   document.getElementById('snap-hint').textContent = 'AI is analyzing your photo...';
+
   try {
-    const prompt = `Look at this food photo. Identify the dish, estimate the portion shown, and give nutrition for that portion.
-Reply with ONLY a JSON object, no other text. Use exactly these keys: "emoji" (one food emoji), "name" (dish name), "portion" (e.g. 1 plate), "cal" (calories number), "p" (protein g), "c" (carbs g), "f" (fat g), "f_fiber" (fiber g). Example: {"emoji":"🍛","name":"Pav Bhaji","portion":"1 plate","cal":450,"p":12,"c":55,"f":18,"f_fiber":6}`;
-    const r = await fetch(BACKEND + '/analyze-image', {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('https://nutri-ai-backend-rtt8.onrender.com/analyze-food', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageBase64: currentImageBase64, mediaType: currentImageMediaType })
+      body: formData
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Analysis failed');
-    const result = data;
-    hideToast();
-    const item = {
-      emoji: result.emoji || '🍽️',
-      name: result.name || 'Unknown food',
-      portion: result.portion || '1 serving',
-      cal: parseInt(result.cal, 10) || 0,
-      p: parseInt(result.p, 10) || 0,
-      c: parseInt(result.c, 10) || 0,
-      f: parseInt(result.f, 10) || 0,
-      f_fiber: parseInt(result.f_fiber, 10) || 0
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+
+    // ✅ Read the CORRECT fields from backend response
+    const parsed = data.parsed;
+
+    const name     = parsed.dish_name        || 'Unknown Food';
+    const portion  = parsed.estimated_portion || '1 serving';
+    const calories = parsed.calories          || 0;
+    const protein  = parsed.protein_g         || 0;
+    const carbs    = parsed.carbs_g           || 0;
+    const fat      = parsed.fat_g             || 0;
+
+    // ✅ Update the result card UI
+    document.getElementById('result-food-name').textContent = name;
+    document.getElementById('result-portion').textContent   = portion;
+    document.getElementById('result-cal-num').textContent   = calories;
+    document.getElementById('res-p').textContent            = protein + 'g';
+    document.getElementById('res-c').textContent            = carbs   + 'g';
+    document.getElementById('res-f').textContent            = fat     + 'g';
+
+    // ✅ Save for "Add to Today's Log" button
+    S.pendingItem = {
+      name, portion, emoji: '🍽️',
+      cal: calories, p: protein, c: carbs, f: fat
     };
-    document.getElementById('result-food-name').textContent = item.emoji + ' ' + item.name;
-    document.getElementById('result-portion').textContent = item.portion;
-    document.getElementById('result-cal-num').textContent = item.cal;
-    document.getElementById('res-p').textContent = item.p + 'g';
-    document.getElementById('res-c').textContent = item.c + 'g';
-    document.getElementById('res-f').textContent = item.f + 'g';
+
     document.getElementById('ai-result').classList.add('show');
     document.getElementById('snap-hint').textContent = '';
-    S.pendingItem = item;
-  } catch (err) {
-    console.error('Analyze error:', err);
-    let msg = (err && err.message) || 'Analysis failed';
-    if (msg === 'Failed to fetch' || msg.indexOf('NetworkError') !== -1) {
-      msg = 'Network blocked. Open the app from a local server (e.g. run "npx serve" in the folder), not by double-clicking the file.';
-    }
-    showToast('⚠️ ' + msg);
-    document.getElementById('snap-hint').textContent = msg.length > 60 ? 'Snap failed. See message below.' : msg;
+    showToast('✅ Analysis complete!');
+
+  } catch (error) {
+    console.error('Analysis error:', error);
+    showToast('❌ Connection Failed: Is the Python server running?');
+    document.getElementById('snap-hint').textContent = 'Failed to analyze. Check server connection.';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Analyze with AI';
   }
-  btn.disabled = false; btn.innerHTML = '✨ Analyze with AI';
 }
 
 async function searchFood() {
   const query = document.getElementById('foodSearchInput').value.trim();
   if (!query) return;
-  if (!requireGeminiKey()) return;
+  // Mock implementation for offline demo
   const btn = document.getElementById('searchBtn');
   btn.textContent = '...'; btn.disabled = true;
   document.getElementById('search-result').classList.remove('show');
   document.getElementById('swap-card').classList.remove('show');
   document.getElementById('search-hint').textContent = 'Fetching nutrition info...';
-  try {
-    const prompt = `You are a nutrition database. Food: "${query}". Goal: ${S.goal || 'general health'}. Return real nutrition for a standard serving. Only valid JSON with keys: emoji, name, portion, cal, p, c, f, f_fiber (all numbers except emoji/name/portion). No markdown.`;
-    const r = await fetch(BACKEND + '/search-food', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, goal: S.goal })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Search failed');
-    const parsed = data;
-    hideToast();
-    const result = {
-      emoji: parsed.emoji || '🍽️',
-      name: parsed.name || query,
-      portion: parsed.portion || '1 serving',
-      cal: parseInt(parsed.cal, 10) || 0,
-      p: parseInt(parsed.p, 10) || 0,
-      c: parseInt(parsed.c, 10) || 0,
-      f: parseInt(parsed.f, 10) || 0,
-      f_fiber: parseInt(parsed.f_fiber, 10) || 0
+  
+  // Simulate processing time
+  setTimeout(() => {
+    const mockFoods = {
+      'grilled chicken': { emoji: '🍗', name: 'Grilled Chicken', portion: '100g serving', cal: 165, p: 31, c: 0, f: 4, f_fiber: 0 },
+      'banana': { emoji: '🍌', name: 'Banana', portion: '1 medium', cal: 105, p: 1, c: 27, f: 0, f_fiber: 3 },
+      'oatmeal': { emoji: '🥣', name: 'Oatmeal', portion: '1 cup cooked', cal: 150, p: 5, c: 27, f: 3, f_fiber: 4 },
+      'protein shake': { emoji: '🥤', name: 'Protein Shake', portion: '1 serving', cal: 120, p: 25, c: 3, f: 1, f_fiber: 0 },
+      'big mac': { emoji: '🍔', name: 'Big Mac', portion: '1 burger', cal: 563, p: 25, c: 46, f: 33, f_fiber: 3 },
+      'pizza': { emoji: '🍕', name: 'Pizza Slice', portion: '1 slice', cal: 285, p: 12, c: 35, f: 9, f_fiber: 2 },
+      'salad': { emoji: '🥗', name: 'Green Salad', portion: '1 bowl', cal: 50, p: 2, c: 10, f: 0, f_fiber: 4 },
+      'rice': { emoji: '🍚', name: 'White Rice', portion: '1 cup cooked', cal: 205, p: 4, c: 45, f: 0, f_fiber: 1 },
+      'dal': { emoji: '🫘', name: 'Dal', portion: '1 cup', cal: 116, p: 7, c: 20, f: 1, f_fiber: 4 },
+      'pav bhaji': { emoji: '🍛', name: 'Pav Bhaji', portion: '1 plate', cal: 450, p: 12, c: 55, f: 18, f_fiber: 6 }
     };
+    
+    const result = mockFoods[query.toLowerCase()] || { emoji: '🍽️', name: query, portion: '1 serving', cal: 200, p: 10, c: 25, f: 8, f_fiber: 2 };
+    
     document.getElementById('search-food-name').textContent = result.emoji + ' ' + result.name;
     document.getElementById('search-portion').textContent = result.portion;
     document.getElementById('search-cal-num').textContent = result.cal;
@@ -1916,13 +1923,10 @@ async function searchFood() {
     S.pendingItem = result;
     const swap = interceptSearch(query, result);
     if (swap) showSwapCard(swap, result);
-  } catch (e) {
-    console.error('Search error:', e);
-    const msg = (e && e.message) || 'Search failed';
-    showToast('⚠️ ' + (msg.length > 50 ? 'Search failed. Try again.' : msg));
-    document.getElementById('search-hint').textContent = 'Failed — try again or check your API key.';
-  }
-  btn.textContent = 'Search'; btn.disabled = false;
+    
+    btn.textContent = 'Search'; btn.disabled = false;
+    showToast('✅ Mock search complete!');
+  }, 1000);
 }
 
 function addCurrentToLog() {
@@ -2298,7 +2302,7 @@ function stopLoadingMessages() {
 
 async function runPantryArchitect() {
   if (pantryTags.length < 2) return;
-  if (!requireGeminiKey()) return;
+  // Mock implementation for offline demo
 
   document.getElementById('pantry-results').style.display = 'none';
   document.getElementById('pantry-loading').style.display = 'block';
@@ -2308,90 +2312,88 @@ async function runPantryArchitect() {
   const goal = S.goal || 'maintain';
   const goalLabelsMap = { lose: 'Weight Loss', maintain: 'Maintenance', muscle: 'Muscle Gain', athletic: 'Athletic Performance' };
   const goalName = goalLabelsMap[goal] || 'General Health';
-  const cuisineContext = S.cuisines.length > 0 ? S.cuisines.join(', ') : 'Indian, Mediterranean, General';
 
-  const goalInstructions = {
-    lose: `For WEIGHT LOSS: Rank recipes by highest Satiety-to-Calorie ratio (Fiber×5 + Protein×3) / (Calories/100). Prefer boiled/steamed over fried. Suggest high-volume low-calorie dishes. Example: if potatoes and curd are present, suggest Boiled Potato Raita over fried patties.`,
-    muscle: `For MUSCLE GAIN: Rank recipes by highest bioavailable protein content. Target protein-to-carb ratio of at least 1:2. Prefer complete protein sources. Example: if chicken and rice are present, suggest a high-protein stir-fry.`,
-    maintain: `For MAINTENANCE: Rank recipes by macro balance — aim for ~30% protein, 40% carbs, 30% fat. Prefer whole foods and nutrient density.`,
-    athletic: `For ATHLETIC PERFORMANCE: Rank recipes by carbohydrate availability for energy + protein for recovery. Prioritise pre/post workout suitability.`
-  };
+  // Simulate processing time
+  setTimeout(() => {
+    const mockRecipes = [
+      {
+        rank: 1,
+        emoji: "🍛",
+        name: "Moong Dal Usal",
+        description: "A protein-rich lentil dish perfect for your weight loss goal. High in fiber and low in calories while keeping you satisfied.",
+        goalMatchPct: 92,
+        goalMatchReason: "Highest satiety-to-calorie ratio with zero waste",
+        cal: 280,
+        protein: 18,
+        carbs: 45,
+        fat: 4,
+        fiber: 12,
+        portion: "1 bowl (300g)",
+        ingredientsUsed: pantryTags.slice(0, 3),
+        optionalBoosts: ["cumin seeds"],
+        cookingSteps: [
+          "Wash and soak moong dal for 30 minutes",
+          "Pressure cook dal with water and turmeric",
+          "Sauté onions, tomatoes, and spices",
+          "Mix cooked dal with sautéed mixture and simmer"
+        ],
+        nutritionistTweak: "Use only 1 tsp oil for sautéing and add 100g chopped cabbage to increase volume without calories",
+        satietyScore: 4.8
+      },
+      {
+        rank: 2,
+        emoji: "🥗",
+        name: "Sprouts Salad",
+        description: "Fresh and crunchy salad with sprouted lentils. Excellent source of plant-based protein and fiber.",
+        goalMatchPct: 88,
+        goalMatchReason: "High protein content with low calorie density",
+        cal: 180,
+        protein: 12,
+        carbs: 30,
+        fat: 3,
+        fiber: 10,
+        portion: "1 bowl (250g)",
+        ingredientsUsed: pantryTags.slice(1, 4),
+        optionalBoosts: ["lemon juice"],
+        cookingSteps: [
+          "Sprout the moong overnight",
+          "Chop onions, tomatoes, and cucumber",
+          "Mix all ingredients with minimal oil",
+          "Season with salt and spices"
+        ],
+        nutritionistTweak: "Add 50g more sprouts and use curd instead of oil for dressing to boost protein",
+        satietyScore: 4.2
+      },
+      {
+        rank: 3,
+        emoji: "🍲",
+        name: "Vegetable Soup",
+        description: "Light and nutritious soup using available vegetables. Perfect for maintaining energy levels.",
+        goalMatchPct: 85,
+        goalMatchReason: "Balanced macros with high nutrient density",
+        cal: 120,
+        protein: 6,
+        carbs: 20,
+        fat: 2,
+        fiber: 8,
+        portion: "1 bowl (300ml)",
+        ingredientsUsed: pantryTags.slice(2, 5),
+        optionalBoosts: ["black pepper"],
+        cookingSteps: [
+          "Chop all vegetables finely",
+          "Boil water and add vegetables",
+          "Add spices and simmer for 15 minutes",
+          "Blend partially for texture"
+        ],
+        nutritionistTweak: "Add 2 boiled eggs to the soup to meet your daily protein floor",
+        satietyScore: 3.8
+      }
+    ];
 
-  const proTipInstructions = {
-    lose: `The Nutritionist's Tweak must be specific for weight loss: reduce oil to 1 tsp, add volume vegetables (cabbage, cucumber, bottle gourd) even if not listed, use dry-roasting methods, suggest yoghurt-based preparations.`,
-    muscle: `The Nutritionist's Tweak must be specific for muscle gain: suggest adding unflavored whey to sauces/curd, doubling egg whites, using whole milk, increasing portion of the protein component by 50%.`,
-    maintain: `The Nutritionist's Tweak should focus on nutritional completeness: add a micronutrient-rich side (amla, sprouts, green chutney), suggest cooking methods that preserve nutrients.`,
-    athletic: `The Nutritionist's Tweak should focus on energy: add a complex-carb booster (banana, sweet potato, oats) and a fast-absorbing post-workout protein option.`
-  };
-
-  const prompt = `You are a Senior Clinical Nutritionist and Chef specialising in Indian, Maharashtrian, and global cuisines. 
-User's available ingredients: ${pantryTags.join(', ')}
-User's goal: ${goalName}
-Preferred cuisines: ${cuisineContext}
-Protein floor: ${S.proteinFloor || 120}g/day, Calorie target: ${S.calorieGoal} kcal
-
-ZERO-WASTE RULE: Use as many of the provided ingredients as possible without requiring the user to buy more. You may suggest 1-2 optional add-ons but clearly mark them as "optional boost."
-
-${goalInstructions[goal]}
-
-${proTipInstructions[goal]}
-
-LOCAL AWARENESS: If lentils/dal/moong/chana are present, strongly consider Usal, Misal, or Sukhhi Sabzi. Favour Indian/Maharashtrian dishes when ingredients match. Use authentic dish names.
-
-Generate exactly 3 healthy recipes based on these ingredients and the user's goal. Rank them 1 (best match) to 3.
-
-Respond ONLY with a valid JSON array, no markdown, no backticks:
-[
-  {
-    "rank": 1,
-    "emoji": "<single emoji>",
-    "name": "<specific dish name e.g. Moong Sprouts Usal, not just Curry>",
-    "description": "<2 sentence description of the dish and why it fits their goal>",
-    "goalMatchPct": <integer 70-98>,
-    "goalMatchReason": "<one line why this is ranked #1 for their goal>",
-    "cal": <integer>,
-    "protein": <integer grams>,
-    "carbs": <integer grams>,
-    "fat": <integer grams>,
-    "fiber": <integer grams>,
-    "portion": "<e.g. 1 bowl (300g)>",
-    "ingredientsUsed": ["<ingredient from user list>", ...],
-    "optionalBoosts": ["<optional ingredient>", ...],
-    "cookingSteps": ["<step 1>", "<step 2>", "<step 3>", "<step 4>"],
-    "nutritionistTweak": "<specific cooking modification for their goal — be very precise, e.g. exact quantities, method changes>",
-    "satietyScore": <float e.g. 4.2>
-  },
-  { "rank": 2, ... },
-  { "rank": 3, ... }
-]`;
-
-  try {
-    const r = await fetch(BACKEND + '/generate-recipes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ingredients: pantryTags,
-        goal: S.goal,
-        cuisines: S.cuisines,
-        calorieGoal: S.calorieGoal,
-        proteinFloor: S.proteinFloor
-      })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Recipe generation failed');
-    const recipes = Array.isArray(data) ? data : (data.recipes || []);
-    if (recipes.length === 0) throw new Error('No recipes returned');
-    hideToast();
     stopLoadingMessages();
-    renderRecipeCards(recipes, goalName);
-  } catch (err) {
-    console.error('Pantry error:', err);
-    stopLoadingMessages();
-    document.getElementById('pantry-loading').style.display = 'none';
-    document.getElementById('pantry-go-btn').disabled = false;
-    const msg = (err && err.message) || 'Recipe generation failed';
-    showToast('⚠️ ' + (msg.length > 50 ? 'Recipes failed. Try again.' : msg));
-  }
+    renderRecipeCards(mockRecipes, goalName);
+    showToast('✅ Mock recipes generated!');
+  }, 4000);
 }
 
 function renderRecipeCards(recipes, goalName) {
