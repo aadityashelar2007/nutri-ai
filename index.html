@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NutriAI – Smart Calorie Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
 /* ═══════════════════════════════════════
    THEME VARIABLES
@@ -49,6 +50,7 @@
    RESET & BASE
 ═══════════════════════════════════════ */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+.hidden { display: none !important; }
 html { scroll-behavior: smooth; }
 body {
   background: var(--bg);
@@ -1137,20 +1139,34 @@ body {
           </div>
         </div>
         <div>
-          <div class="result-box" id="search-result">
-            <div class="rb-tag">✨ AI Result</div>
-            <div class="rb-name" id="search-food-name">Grilled Chicken</div>
-            <div class="rb-portion" id="search-portion">100g serving</div>
-            <div>
-              <div class="rb-cal" id="search-cal-num">165</div>
-              <span class="rb-unit">kcal</span>
+          <div class="result-box hidden" id="search-result" style="display:none">
+            <div class="mt-8 bg-[#1a1c23] rounded-2xl p-6 shadow-xl border border-gray-800 text-white w-full max-w-3xl">
+              <h2 class="text-2xl font-bold mb-4 tracking-wide">Total Nutrition</h2>
+              <div class="flex flex-wrap gap-8 mb-8 border-b border-gray-700 pb-6">
+                <div>
+                  <p class="text-sm text-gray-400 font-semibold uppercase tracking-wider mb-1">Calories</p>
+                  <p class="text-4xl font-black text-emerald-400">
+                    <span id="search-total-calories">0</span> <span class="text-lg font-medium text-emerald-500">kcal</span>
+                  </p>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-400 font-semibold uppercase tracking-wider mb-1">Protein</p>
+                  <p class="text-2xl font-bold"><span id="search-total-protein">0</span>g</p>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-400 font-semibold uppercase tracking-wider mb-1">Carbs</p>
+                  <p class="text-2xl font-bold"><span id="search-total-carbs">0</span>g</p>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-400 font-semibold uppercase tracking-wider mb-1">Fat</p>
+                  <p class="text-2xl font-bold"><span id="search-total-fat">0</span>g</p>
+                </div>
+              </div>
+
+              <h3 class="text-lg font-semibold mb-4 text-gray-300">Item Breakdown</h3>
+              <div id="search-items" class="space-y-3"></div>
+              <button class="primary-btn" onclick="addSearchToLog()" style="margin-top:24px">+ Add to Today's Log</button>
             </div>
-            <div class="result-macros">
-              <div class="result-macro">Protein <br><strong id="srch-p">31g</strong></div>
-              <div class="result-macro">Carbs <br><strong id="srch-c">0g</strong></div>
-              <div class="result-macro">Fat <br><strong id="srch-f">4g</strong></div>
-            </div>
-            <!-- Smart Swap Card -->
             <div class="swap-card" id="swap-card">
               <div class="swap-card-tag">🔄 Smart Swap · Nutritionist Suggestion</div>
               <div class="swap-card-body" id="swap-card-body">Looking for a better boost? Try a smarter alternative.</div>
@@ -1159,7 +1175,6 @@ body {
                 <button class="swap-btn-dismiss" onclick="dismissSwap()">Keep Original</button>
               </div>
             </div>
-            <button class="primary-btn" onclick="addSearchToLog()" style="margin-top:0">+ Add to Today's Log</button>
           </div>
           <div style="padding-top:16px;font-size:12px;color:var(--text2);text-align:center" id="search-hint">Your result will appear here after searching.</div>
         </div>
@@ -1885,6 +1900,46 @@ async function analyzeImage() {
   }
 }
 
+function renderSearchResult(result) {
+  const container = document.getElementById('search-result');
+  const totalCalories = document.getElementById('search-total-calories');
+  const totalProtein = document.getElementById('search-total-protein');
+  const totalCarbs = document.getElementById('search-total-carbs');
+  const totalFat = document.getElementById('search-total-fat');
+  const itemsContainer = document.getElementById('search-items');
+
+  if (!result || !result.success) {
+    container.classList.remove('show');
+    container.style.display = 'none';
+    itemsContainer.innerHTML = '';
+    return;
+  }
+
+  const total = result.total || {};
+  const items = Array.isArray(result.items) ? result.items : [];
+
+  totalCalories.textContent = total.calories || 0;
+  totalProtein.textContent = total.protein_g || total.protein || 0;
+  totalCarbs.textContent = total.carbs_g || total.carbs || 0;
+  totalFat.textContent = total.fat_g || total.fat || 0;
+
+  itemsContainer.innerHTML = items.length
+    ? items.map((item, index) => `
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-[#111318] p-4 rounded-xl border border-gray-800 hover:border-gray-700 transition-colors" data-index="${index}">
+          <span class="font-semibold text-lg mb-2 sm:mb-0 capitalize text-gray-100">${item.item || item.name || 'Food item'}</span>
+          <div class="flex gap-4 text-sm font-medium text-gray-400">
+            <span class="w-20"><strong class="text-emerald-400">${item.calories || 0}</strong> kcal</span>
+            <span class="w-16">P: ${item.protein_g || item.protein || 0}g</span>
+            <span class="w-16">C: ${item.carbs_g || item.carbs || 0}g</span>
+            <span class="w-16">F: ${item.fat_g || item.fat || 0}g</span>
+          </div>
+        </div>`).join('')
+    : '<p class="text-sm text-gray-400">No item breakdown available.</p>';
+
+  container.style.display = 'block';
+  container.classList.add('show');
+}
+
 async function searchFood() {
   const query = document.getElementById('foodSearchInput').value.trim();
   if (!query) return;
@@ -1893,33 +1948,66 @@ async function searchFood() {
   document.getElementById('search-result').classList.remove('show');
   document.getElementById('swap-card').classList.remove('show');
   document.getElementById('search-hint').textContent = 'AI is fetching nutrition info...';
+  
   try {
     const response = await fetch('https://nutri-ai-backend-rtt8.onrender.com/search-food', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: query })
     });
+    
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    const parsed = data.parsed;
-    const name     = parsed.dish_name         || query;
-    const portion  = parsed.estimated_portion || '1 serving';
-    const calories = parsed.calories          || 0;
-    const protein  = parsed.protein_g         || 0;
-    const carbs    = parsed.carbs_g           || 0;
-    const fat      = parsed.fat_g             || 0;
-    document.getElementById('search-food-name').textContent = '✨ ' + name;
-    document.getElementById('search-portion').textContent   = portion;
-    document.getElementById('search-cal-num').textContent   = calories;
-    document.getElementById('srch-p').textContent           = protein + 'g';
-    document.getElementById('srch-c').textContent           = carbs   + 'g';
-    document.getElementById('srch-f').textContent           = fat     + 'g';
+
+    // 1. Extract the new data format safely
+    const total = data.total || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+    const items = data.items || [];
+
+    // 2. Update the Hero Totals
+    document.getElementById('search-total-calories').textContent = total.calories;
+    document.getElementById('search-total-protein').textContent = total.protein_g;
+    document.getElementById('search-total-carbs').textContent = total.carbs_g;
+    document.getElementById('search-total-fat').textContent = total.fat_g;
+
+    // 3. Build the Item Breakdown list
+    const itemsContainer = document.getElementById('search-items');
+    if (items.length > 0) {
+      itemsContainer.innerHTML = items.map((item, index) => `
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-[#111318] p-4 rounded-xl border border-gray-800 hover:border-gray-700 transition-colors" data-index="${index}">
+          <span class="font-semibold text-lg mb-2 sm:mb-0 capitalize text-gray-100">${item.item || 'Food item'}</span>
+          <div class="flex gap-4 text-sm font-medium text-gray-400">
+            <span class="w-20"><strong class="text-emerald-400">${item.calories || 0}</strong> kcal</span>
+            <span class="w-16">P: ${item.protein_g || 0}g</span>
+            <span class="w-16">C: ${item.carbs_g || 0}g</span>
+            <span class="w-16">F: ${item.fat_g || 0}g</span>
+          </div>
+        </div>`).join('');
+    } else {
+      itemsContainer.innerHTML = '<p class="text-sm text-gray-400">No item breakdown available.</p>';
+    }
+
+    // 4. Show the results
+    document.getElementById('search-result').style.display = 'block';
     document.getElementById('search-result').classList.add('show');
     document.getElementById('search-hint').textContent = '';
-    S.pendingItem = { name, portion, emoji: '🍽️', cal: calories, p: protein, c: carbs, f: fat };
+
+    // 5. Save to pending state for the "Add to Log" button
+    S.pendingItem = {
+      name: query,
+      portion: items.length > 1 ? `${items.length} items` : '1 serving',
+      emoji: '🍽️',
+      cal: Math.round(total.calories || 0),
+      p: Math.round(total.protein_g || 0),
+      c: Math.round(total.carbs_g || 0),
+      f: Math.round(total.fat_g || 0),
+    };
+
+    // 6. Check for Smart Swaps
     const swap = interceptSearch(query, S.pendingItem);
     if (swap) showSwapCard(swap, S.pendingItem);
+    
     showToast('✅ Nutrition data found!');
+
   } catch (error) {
     console.error('Search error:', error);
     document.getElementById('search-hint').textContent = 'Failed to fetch. Try again!';
